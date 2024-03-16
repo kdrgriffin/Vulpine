@@ -15,6 +15,9 @@ import net.minecraft.entity.passive.TameableEntity;
 import net.minecraft.entity.passive.WolfEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.registry.tag.BiomeTags;
@@ -81,10 +84,42 @@ public abstract class FoxEntityMixin extends AnimalEntity implements Tameable {
         }
     }
 
-    @Unique
+    @Override
     public ActionResult interactMob(PlayerEntity player, Hand hand) {
         ActionResult actionResult = super.interactMob(player,hand);
         if(actionResult.isAccepted()) return actionResult;
+
+        int i = this.getBreedingAge();
+        ItemStack itemStack = player.getStackInHand(hand);
+        Item item = itemStack.getItem();
+
+        if (this.isBreedingItem(itemStack)) {
+            if (this.getHealth() < this.getMaxHealth()) {
+                if (!player.getAbilities().creativeMode) {
+                    itemStack.decrement(1);
+                }
+                this.heal((float) item.getFoodComponent().getHunger());
+                this.playSound(this.getEatSound(itemStack), 1.0F, 1.0F);
+                return ActionResult.SUCCESS;
+            }
+            if (!this.getWorld().isClient && i == 0 && this.canEat()) {
+                if (this.getHealth() == this.getMaxHealth())
+                {
+                    this.eat(player, hand, itemStack);
+                    this.lovePlayer(player);
+                    return ActionResult.SUCCESS;
+                }
+            }
+            if (this.isBaby()) {
+                this.eat(player, hand, itemStack);
+                this.growUp(toGrowUpAge(-i), true);
+                return ActionResult.success(this.getWorld().isClient);
+            }
+            if (this.getWorld().isClient) {
+                return ActionResult.CONSUME;
+            }
+        }
+
         UUID uuid = ((FoxEntity)(Object)this).getDataTracker().get(OWNER).orElse(null);
         if (((FoxEntity)(Object)this).getDataTracker().get(Vulpine.TAME_PROGRESS) != 4 || !player.getUuid().equals(uuid)) return ActionResult.PASS;
         ((FoxEntity)(Object)this).setSitting(!((FoxEntity)(Object)this).isSitting());
@@ -92,6 +127,7 @@ public abstract class FoxEntityMixin extends AnimalEntity implements Tameable {
         this.navigation.stop();
         this.setTarget(null);
         return ActionResult.SUCCESS;
+
     }
 
     @Inject(method = "readCustomDataFromNbt", at = @At("TAIL"))
