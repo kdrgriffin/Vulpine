@@ -166,9 +166,11 @@ public abstract class FoxEntityMixin extends AnimalEntity implements Tameable {
             this.dataTracker.set(TAME_PROGRESS, (int)(t | 4));
             this.getAttributeInstance(EntityAttributes.GENERIC_MAX_HEALTH).setBaseValue(20.0);
             setHealth(20.0f);
+            this.getAttributeInstance(EntityAttributes.GENERIC_ATTACK_DAMAGE).setBaseValue(4.0f);
         } else {
             this.dataTracker.set(TAME_PROGRESS, (int)(t));
             this.getAttributeInstance(EntityAttributes.GENERIC_MAX_HEALTH).setBaseValue(8.0);
+            this.getAttributeInstance(EntityAttributes.GENERIC_ATTACK_DAMAGE).setBaseValue(2.0f);
         }
     }
 
