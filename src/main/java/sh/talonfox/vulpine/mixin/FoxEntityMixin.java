@@ -1,15 +1,24 @@
 package sh.talonfox.vulpine.mixin;
 
+import net.minecraft.advancement.criterion.Criteria;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.goal.*;
+import net.minecraft.entity.data.DataTracker;
+import net.minecraft.entity.data.TrackedData;
+import net.minecraft.entity.data.TrackedDataHandlerRegistry;
 import net.minecraft.entity.passive.*;
+import net.minecraft.entity.Tameable;
+import net.minecraft.entity.passive.TameableEntity;
+import net.minecraft.entity.passive.WolfEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.registry.tag.BiomeTags;
+import net.minecraft.server.ServerConfigHandler;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
@@ -17,6 +26,7 @@ import net.minecraft.util.math.random.Random;
 import net.minecraft.world.World;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.BiomeKeys;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -24,9 +34,11 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import sh.talonfox.vulpine.Vulpine;
 
+import java.util.Optional;
 import java.util.UUID;
 
 import static net.minecraft.entity.passive.FoxEntity.OWNER;
+import static sh.talonfox.vulpine.Vulpine.TAME_PROGRESS;
 
 /*
 Tame Stages:
@@ -39,19 +51,33 @@ Tame Stages:
 
 @Mixin(FoxEntity.class)
 @SuppressWarnings("unused")
-public abstract class FoxEntityMixin extends AnimalEntity {
+public abstract class FoxEntityMixin extends AnimalEntity implements Tameable {
     protected FoxEntityMixin(EntityType<? extends AnimalEntity> entityType, World world) {
         super(entityType, world);
     }
+
+    private static final TrackedData<Optional<UUID>> OWNER_UUID = DataTracker.registerData(FoxEntity.class, TrackedDataHandlerRegistry.OPTIONAL_UUID);
 
     @Inject(at = @At("TAIL"), method = "initDataTracker()V")
     protected void addTameProgressTracker(CallbackInfo ci) {
         ((FoxEntity) (Object) this).getDataTracker().startTracking(Vulpine.TAME_PROGRESS, 0);
     }
 
+    @Inject(at = @At("TAIL"), method = "initDataTracker()V")
+    protected void addOwnerTracker(CallbackInfo ci) {
+        ((FoxEntity) (Object) this).getDataTracker().startTracking(OWNER_UUID, Optional.empty());
+    }
+
     @Inject(method = "writeCustomDataToNbt", at = @At("TAIL"))
     public void tameProgressSave(NbtCompound nbt, CallbackInfo ci) {
         nbt.putInt("TameProgress", ((FoxEntity) (Object) this).getDataTracker().get(Vulpine.TAME_PROGRESS));
+    }
+
+    @Inject(method = "writeCustomDataToNbt", at = @At("TAIL"))
+    public void ownerSave(NbtCompound nbt, CallbackInfo ci) {
+        if (this.getOwnerUuid() != null) {
+            nbt.putUuid("Owner", this.getOwnerUuid());
+        }
     }
 
     @Unique
@@ -73,6 +99,26 @@ public abstract class FoxEntityMixin extends AnimalEntity {
         Vulpine.addFoxGoals(((FoxEntity) (Object) this),nbt.getInt("TameProgress"));
     }
 
+    @Inject(method = "readCustomDataFromNbt", at = @At("TAIL"))
+    public void ownerLoad(NbtCompound nbt, CallbackInfo ci) {
+        UUID uUID;
+        if (nbt.containsUuid("Owner")) {
+            uUID = nbt.getUuid("Owner");
+        } else {
+            String string = nbt.getString("Owner");
+            uUID = ServerConfigHandler.getPlayerUuidByName(this.getServer(), string);
+        }
+
+        if (uUID != null) {
+            try {
+                this.setOwnerUuid(uUID);
+                this.setTamed(true);
+            } catch (Throwable var4) {
+                this.setTamed(false);
+            }
+        }
+    }
+
     @Inject(method = "initGoals", at = @At("HEAD"), cancellable = true)
     public void addAiGoals(CallbackInfo ci) {
         ((FoxEntity) (Object) this).followChickenAndRabbitGoal = new ActiveTargetGoal<AnimalEntity>(((FoxEntity) (Object) this), AnimalEntity.class, 10, false, false, entity -> ((FoxEntity) (Object) this).getDataTracker().get(Vulpine.TAME_PROGRESS) < 3 && (entity instanceof ChickenEntity || entity instanceof RabbitEntity));
@@ -90,6 +136,36 @@ public abstract class FoxEntityMixin extends AnimalEntity {
         ((FoxEntity) (Object) this).goalSelector.add(11, new WanderAroundFarGoal(((FoxEntity) (Object) this), 1.0));
         ((FoxEntity) (Object) this).targetSelector.add(3, ((FoxEntity) (Object) this).new DefendFriendGoal(LivingEntity.class, false, false, entity -> FoxEntity.JUST_ATTACKED_SOMETHING_FILTER.test((Entity) entity) && !((FoxEntity) (Object) this).canTrust(entity.getUuid())));
         ci.cancel();
+    }
+
+    @Nullable
+    public UUID getOwnerUuid() {
+        return (UUID)((FoxEntity)(Object)this).getDataTracker().get(OWNER).orElse(null);
+    }
+
+    public void setOwnerUuid(@Nullable UUID uuid) {
+        this.dataTracker.set(OWNER_UUID, Optional.ofNullable(((FoxEntity)(Object)this).getDataTracker().get(OWNER).orElse(null)));
+    }
+
+    public void setOwner(PlayerEntity player) {
+        this.setTamed(true);
+        this.setOwnerUuid(((FoxEntity)(Object)this).getDataTracker().get(OWNER).orElse(null));
+        if (player instanceof ServerPlayerEntity) {
+            Criteria.TAME_ANIMAL.trigger((ServerPlayerEntity)player, this);
+        }
+
+    }
+    public boolean isTamed() {
+        return (((FoxEntity)(Object)this).getDataTracker().get(TAME_PROGRESS)) == 4;
+    }
+
+    public void setTamed(boolean tamed) {
+        int t = (((FoxEntity)(Object)this).getDataTracker().get(TAME_PROGRESS));
+        if (tamed) {
+            this.dataTracker.set(TAME_PROGRESS, (int)(t | 4));
+        } else {
+            this.dataTracker.set(TAME_PROGRESS, (int)(t));
+        }
     }
 
     @Redirect(method = "initialize", at = @At(value = "INVOKE", target = "Lnet/minecraft/entity/passive/FoxEntity$Type;fromBiome(Lnet/minecraft/registry/entry/RegistryEntry;)Lnet/minecraft/entity/passive/FoxEntity$Type;"))
