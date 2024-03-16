@@ -5,6 +5,7 @@ import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.ai.goal.*;
+import net.minecraft.entity.attribute.EntityAttributes;
 import net.minecraft.entity.data.DataTracker;
 import net.minecraft.entity.data.TrackedData;
 import net.minecraft.entity.data.TrackedDataHandlerRegistry;
@@ -163,8 +164,11 @@ public abstract class FoxEntityMixin extends AnimalEntity implements Tameable {
         int t = (((FoxEntity)(Object)this).getDataTracker().get(TAME_PROGRESS));
         if (tamed) {
             this.dataTracker.set(TAME_PROGRESS, (int)(t | 4));
+            this.getAttributeInstance(EntityAttributes.GENERIC_MAX_HEALTH).setBaseValue(20.0);
+            setHealth(20.0f);
         } else {
             this.dataTracker.set(TAME_PROGRESS, (int)(t));
+            this.getAttributeInstance(EntityAttributes.GENERIC_MAX_HEALTH).setBaseValue(8.0);
         }
     }
 
