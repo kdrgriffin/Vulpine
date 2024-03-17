@@ -38,6 +38,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.LocalCapture;
 import sh.talonfox.vulpine.Vulpine;
 
 import java.util.Optional;
@@ -57,7 +58,7 @@ Tame Stages:
 
 @Mixin(FoxEntity.class)
 @SuppressWarnings("unused")
-public class FoxEntityMixin extends AnimalEntity implements Tameable {
+public abstract class FoxEntityMixin extends AnimalEntity implements Tameable {
     protected FoxEntityMixin(EntityType<? extends AnimalEntity> entityType, World world) {
         super(entityType, world);
     }
@@ -91,12 +92,13 @@ public class FoxEntityMixin extends AnimalEntity implements Tameable {
         ActionResult actionResult = super.interactMob(player,hand);
         if(actionResult.isAccepted()) return actionResult;
 
+        UUID uuid = ((FoxEntity)(Object)this).getDataTracker().get(OWNER).orElse(null);
         int i = this.getBreedingAge();
         ItemStack itemStack = player.getStackInHand(hand);
         Item item = itemStack.getItem();
 
         if (this.isBreedingItem(itemStack)) {
-            if (this.getHealth() < this.getMaxHealth()) {
+            if (this.getHealth() < this.getMaxHealth() && player.getUuid().equals(uuid)) {
                 if (!player.getAbilities().creativeMode) {
                     itemStack.decrement(1);
                 }
@@ -104,7 +106,7 @@ public class FoxEntityMixin extends AnimalEntity implements Tameable {
                 this.playSound(this.getEatSound(itemStack), 1.0F, 1.0F);
                 return ActionResult.SUCCESS;
             }
-            if (!this.getWorld().isClient && i == 0 && this.canEat()) {
+            else if (!this.getWorld().isClient && i == 0 && this.canEat()) {
                 if (this.getHealth() == this.getMaxHealth())
                 {
                     this.eat(player, hand, itemStack);
@@ -112,7 +114,7 @@ public class FoxEntityMixin extends AnimalEntity implements Tameable {
                     return ActionResult.SUCCESS;
                 }
             }
-            if (this.isBaby()) {
+            else if (this.isBaby()) {
                 this.eat(player, hand, itemStack);
                 this.growUp(toGrowUpAge(-i), true);
                 return ActionResult.success(this.getWorld().isClient);
@@ -122,7 +124,6 @@ public class FoxEntityMixin extends AnimalEntity implements Tameable {
             }
         }
 
-        UUID uuid = ((FoxEntity)(Object)this).getDataTracker().get(OWNER).orElse(null);
         if (((FoxEntity)(Object)this).getDataTracker().get(Vulpine.TAME_PROGRESS) != 4 || !player.getUuid().equals(uuid)) return ActionResult.PASS;
         ((FoxEntity)(Object)this).setSitting(!((FoxEntity)(Object)this).isSitting());
         this.jumping = false;
@@ -249,11 +250,5 @@ public class FoxEntityMixin extends AnimalEntity implements Tameable {
                 return Vulpine.CROSS_FOX;
             }
         }
-    }
-
-    @Nullable
-    @Override
-    public PassiveEntity createChild(ServerWorld world, PassiveEntity entity) {
-        return null;
     }
 }
