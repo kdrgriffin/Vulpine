@@ -23,10 +23,12 @@ import net.minecraft.registry.entry.RegistryEntry;
 import net.minecraft.registry.tag.BiomeTags;
 import net.minecraft.server.ServerConfigHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.random.Random;
+import net.minecraft.world.EntityView;
 import net.minecraft.world.World;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.BiomeKeys;
@@ -55,7 +57,7 @@ Tame Stages:
 
 @Mixin(FoxEntity.class)
 @SuppressWarnings("unused")
-public abstract class FoxEntityMixin extends AnimalEntity implements Tameable {
+public class FoxEntityMixin extends AnimalEntity implements Tameable {
     protected FoxEntityMixin(EntityType<? extends AnimalEntity> entityType, World world) {
         super(entityType, world);
     }
@@ -84,7 +86,7 @@ public abstract class FoxEntityMixin extends AnimalEntity implements Tameable {
         }
     }
 
-    @Override
+    @Unique
     public ActionResult interactMob(PlayerEntity player, Hand hand) {
         ActionResult actionResult = super.interactMob(player,hand);
         if(actionResult.isAccepted()) return actionResult;
@@ -180,6 +182,11 @@ public abstract class FoxEntityMixin extends AnimalEntity implements Tameable {
         return (UUID)((FoxEntity)(Object)this).getDataTracker().get(OWNER).orElse(null);
     }
 
+    @Override
+    public EntityView method_48926() {
+        return getEntityWorld();
+    }
+
     public void setOwnerUuid(@Nullable UUID uuid) {
         this.dataTracker.set(OWNER_UUID, Optional.ofNullable(((FoxEntity)(Object)this).getDataTracker().get(OWNER).orElse(null)));
     }
@@ -242,5 +249,11 @@ public abstract class FoxEntityMixin extends AnimalEntity implements Tameable {
                 return Vulpine.CROSS_FOX;
             }
         }
+    }
+
+    @Nullable
+    @Override
+    public PassiveEntity createChild(ServerWorld world, PassiveEntity entity) {
+        return null;
     }
 }
